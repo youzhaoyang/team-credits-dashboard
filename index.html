@@ -323,6 +323,32 @@
     <div class="pager" id="memberPager"></div>
   </div>
 
+  <!-- API KEY summary -->
+  <div class="card card-pad full">
+    <div class="card-head">
+      <div>
+        <div class="card-title">API 密钥</div>
+        <div class="card-sub">按 API 密钥（项目）聚合 · 含常用模型与占团队比例</div>
+      </div>
+      <button class="card-dl" id="dlKey" title="导出 API 密钥消耗（当前时间窗）">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="rank">#</th>
+          <th>密钥 / 项目</th>
+          <th>常用模型</th>
+          <th class="barcell">消耗分布</th>
+          <th class="r">消耗积分</th>
+          <th class="r">占比</th>
+        </tr>
+      </thead>
+      <tbody id="keyTable"></tbody>
+    </table>
+  </div>
+
   <!-- CONSUMPTION LEDGER -->
   <div class="card card-pad full">
     <div class="card-head">
@@ -381,6 +407,15 @@ const MEMBERS = [
   {name:'Member G', email:'user07@example.com', act:0.72,aff:{'gpt-5.5':4,'default':2}},
   {name:'Member H', email:'user08@example.com', act:0.6, aff:{'claude-opus-4-6':3,'gpt-5.5':3}},
 ];
+// API 密钥（项目）维度：name 为自定义项目名，key 为脱敏密钥串
+const APIKEYS = [
+  {name:'电商素材项目',    key:'sk-live-ec3a…9f21', color:'#4f9e77', w:1.55},
+  {name:'Agent 推理调度',  key:'sk-live-a7b2…4c08', color:'#8fc1e3', w:1.30},
+  {name:'营销内容生成',    key:'sk-live-mk19…2d77', color:'#6f7bc9', w:1.05},
+  {name:'客服对话机器人',  key:'sk-live-cs88…6e3b', color:'#e3a85c', w:0.85},
+  {name:'数据分析看板',    key:'sk-live-da45…0a14', color:'#b06a3a', w:0.62},
+  {name:'内部测试沙盒',    key:'sk-test-sb02…7f90', color:'#d6c247', w:0.38},
+];
 
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 const fmt = n=> n.toLocaleString('en-US');
@@ -390,6 +425,7 @@ const SCENES   = ['Agent 编辑','Plan 生成','云端 Agent','对话消息','Ta
 const SCENE_W  = [0.22,0.10,0.08,0.34,0.26];
 const MEMBER_W = MEMBERS.map(m=>m.act);
 const MODEL_W  = [0.30,0.16,0.10,0.12,0.18,0.14];           // 调用“次数”占比（与积分单价权重不同）
+const KEY_W    = APIKEYS.map(k=>k.w);                       // 各 API 密钥的调用“次数”权重
 const DAY_COUNT= DAY_CURVE.map(c=>Math.round(c*11000));     // 大客户级别：单日约万条
 const TOTAL    = DAY_COUNT.reduce((a,b)=>a+b,0);            // 本窗口（Jun17–23）服务端总条数
 
@@ -409,9 +445,10 @@ function recordAt(i){
   const credits  =Math.round((26+r()*210)*MODELS[modelIdx].w);
   const ok       =r()>0.055;
   const task     ='#'+Math.floor(r()*0xffffff).toString(16).padStart(6,'0');
+  const keyIdx   =pickW(r(),KEY_W);                          // API 密钥维度：抽样追加在末尾，不扰动既有 member/model/credits
   const p=(i-b.lo)/b.n;                                      // 块内也按时间倒序铺满当天
   const ts=new Date(Date.UTC(2026,5,17+di) + (1-p)*86400000 - 1000);
-  return {i,di,memberIdx,modelIdx,sceneIdx,credits,ok,ts,task};
+  return {i,di,memberIdx,modelIdx,sceneIdx,keyIdx,credits,ok,ts,task};
 }
 
 /* ============ 全局时间窗 + 聚合（图表 / KPI / 汇总 / 明细 / 导出 全部跟随）============ */
@@ -429,10 +466,12 @@ function aggregate(fromIdx,toIdx){
   const pos={}; dayIdxs.forEach((di,k)=>pos[di]=k);
   const bdm=dayIdxs.map(()=>MODELS.map(()=>0));
   const bm =MEMBERS.map(()=>({total:0,perModel:MODELS.map(()=>0)}));
+  const bk =APIKEYS.map(()=>({total:0,perModel:MODELS.map(()=>0)}));
   for(let i=lo;i<hi;i++){
     const rec=recordAt(i); const k=pos[rec.di]; if(k===undefined) continue;
     bdm[k][rec.modelIdx]+=rec.credits;
     const o=bm[rec.memberIdx]; o.total+=rec.credits; o.perModel[rec.modelIdx]+=rec.credits;
+    const ko=bk[rec.keyIdx];   ko.total+=rec.credits; ko.perModel[rec.modelIdx]+=rec.credits;
   }
   const dates=dayIdxs.map(di=>DATES[di]);
   const byDateTotal=bdm.map(r=>r.reduce((a,b)=>a+b,0));
@@ -442,8 +481,12 @@ function aggregate(fromIdx,toIdx){
     const o=bm[mi]; let f=0; o.perModel.forEach((v,k)=>{if(v>o.perModel[f])f=k;});
     return {name:mb.name,email:mb.email,total:o.total,perModel:o.perModel.slice(),fav:MODELS[f]};
   }).sort((a,b)=>b.total-a.total);
+  const byKey=APIKEYS.map((ak,ki)=>{
+    const o=bk[ki]; let f=0; o.perModel.forEach((v,k)=>{if(v>o.perModel[f])f=k;});
+    return {name:ak.name,key:ak.key,total:o.total,perModel:o.perModel.slice(),fav:MODELS[f]};
+  }).sort((a,b)=>b.total-a.total);
   const peakIdx=byDateTotal.indexOf(Math.max(...byDateTotal));
-  return {dates,bdm,byDateTotal,total,byModel,byMember,peakIdx};
+  return {dates,bdm,byDateTotal,total,byModel,byMember,byKey,peakIdx};
 }
 
 /* ---------- Chart.js defaults ---------- */
@@ -524,6 +567,27 @@ function renderDashboard(agg){
   memberChart.update();
 
   memberPage=1; renderMemberTable();   // 切换时间窗 → 成员列表重排，回到第 1 页
+  renderKeyTable();
+}
+
+/* ---------- API 密钥消耗汇总 ---------- */
+function renderKeyTable(){
+  const agg=currentAgg; if(!agg) return;
+  const tb=document.getElementById('keyTable'); if(!tb) return; tb.innerHTML='';
+  const maxTotal=agg.byKey[0]?(agg.byKey[0].total||1):1;
+  agg.byKey.forEach((kobj,i)=>{
+    let segs=''; kobj.perModel.forEach((v,mdi)=>{ if(v>0&&kobj.total) segs+=`<span style="background:${MODELS[mdi].color};width:${v/kobj.total*100}%"></span>`; });
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td class="rank">${i+1}</td>
+      <td><div class="user"><div class="avatar">🔑</div>
+        <div><div class="uname">${kobj.name}</div><div class="uemail mono">${kobj.key}</div></div></div></td>
+      <td><span class="modeltag"><span class="dot" style="background:${kobj.fav.color}"></span>${kobj.fav.key}</span></td>
+      <td class="barcell"><div class="minibar" style="display:flex;width:${Math.max(28,kobj.total/maxTotal*100)}%">${segs}</div></td>
+      <td class="r"><span class="tval">${fmt(kobj.total)}</span></td>
+      <td class="r"><span class="tpct">${agg.total?(kobj.total/agg.total*100).toFixed(1):'0.0'}%</span></td>`;
+    tb.appendChild(tr);
+  });
 }
 
 /* ---------- 成员消耗汇总：客户端分页（默认每页 10 名）---------- */
@@ -646,6 +710,11 @@ function exportMemberDetail(){ const a=currentAgg,t=a.total;
   const rows=[head].concat(a.byMember.map((m,i)=>
     [i+1,m.name,m.email,m.fav.key].concat(m.perModel).concat([m.total,(t?m.total/t*100:0).toFixed(1)+'%'])));
   downloadCSV(`member-detail-${rangeTag()}.csv`,rows); }
+function exportKey(){ const a=currentAgg,t=a.total;
+  const head=['排名','API 密钥（项目）','密钥串','常用模型'].concat(MODELS.map(m=>m.key)).concat(['消耗积分','占比']);
+  const rows=[head].concat(a.byKey.map((k,i)=>
+    [i+1,k.name,k.key,k.fav.key].concat(k.perModel).concat([k.total,(t?k.total/t*100:0).toFixed(1)+'%'])));
+  downloadCSV(`apikey-consumption-${rangeTag()}.csv`,rows); }
 function exportTime(){ const a=currentAgg;
   const rows=[['日期'].concat(MODELS.map(m=>m.key)).concat(['当日合计'])].concat(
     a.dates.map((d,k)=>[d].concat(a.bdm[k]).concat([a.byDateTotal[k]])));
@@ -654,6 +723,7 @@ document.getElementById('dlModel').onclick=exportModel;
 document.getElementById('dlMember').onclick=exportMember;
 document.getElementById('dlMemberDetail').onclick=exportMemberDetail;
 document.getElementById('dlTrend').onclick=exportTime;
+document.getElementById('dlKey').onclick=exportKey;
 
 /* ============ 消耗明细：服务端分页 + 时间窗 + 懒加载(500) + 在线上限(1000) + 受控异步导出 ============ */
 const pad = n=>String(n).padStart(2,'0');
