@@ -360,6 +360,7 @@
     <div class="toolbar">
       <select class="fsel" id="fMember"></select>
       <select class="fsel" id="fModel"></select>
+      <select class="fsel" id="fKey"></select>
       <button class="tbtn" id="exportBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         导出 CSV
@@ -372,6 +373,7 @@
           <th>时间</th>
           <th>成员</th>
           <th>模型</th>
+          <th>API 密钥</th>
           <th>任务ID</th>
           <th>状态</th>
           <th class="r">消耗积分</th>
@@ -736,12 +738,13 @@ function windowEnd(days){ let end=0,c=0; for(const b of blocks){ if(c>=days) bre
 function passFilter(rec,f){
   if(f.member>=0 && rec.memberIdx!==f.member) return false;
   if(f.model >=0 && rec.modelIdx !==f.model)  return false;
+  if(f.key   >=0 && rec.keyIdx   !==f.key)    return false;
   return true;
 }
 function mapRow(rec){
-  const mb=MEMBERS[rec.memberIdx], md=MODELS[rec.modelIdx];
+  const mb=MEMBERS[rec.memberIdx], md=MODELS[rec.modelIdx], ak=APIKEYS[rec.keyIdx];
   return {ts:rec.ts,name:mb.name,email:mb.email,model:md.key,color:md.color,
-          credits:rec.credits,task:rec.task,ok:rec.ok};
+          keyName:ak.name,keyColor:ak.color,credits:rec.credits,task:rec.task,ok:rec.ok};
 }
 // 模拟服务端 COUNT（真实环境是带索引的 count，这里整窗扫描计数，仅计数器、不落地明细）
 function apiCount(f){ return new Promise(res=>setTimeout(()=>{
@@ -760,13 +763,14 @@ const elFoot=document.getElementById('ledgerFoot');
 function opt(sel,v,t){const o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o);}
 const fMember=document.getElementById('fMember'); opt(fMember,'-1','全部成员'); MEMBERS.forEach((m,i)=>opt(fMember,i,m.name));
 const fModel =document.getElementById('fModel');  opt(fModel,'-1','全部模型');  MODELS.forEach((m,i)=>opt(fModel,i,m.key));
+const fKey   =document.getElementById('fKey');    opt(fKey,'-1','全部密钥');    APIKEYS.forEach((k,i)=>opt(fKey,i,k.name));
 
 let state={f:null,cursor:0,loaded:0,total:null,done:false,loading:false,capped:false};
 let queryToken=0, io;
 
 function readFilters(){
   const b=rawBounds(currentRange.fromIdx,currentRange.toIdx);
-  return {member:+fMember.value,model:+fModel.value,lo:b.lo,hi:b.hi};
+  return {member:+fMember.value,model:+fModel.value,key:+fKey.value,lo:b.lo,hi:b.hi};
 }
 
 async function applyFilter(){
@@ -799,6 +803,7 @@ function appendRows(rows){
       <td><div class="user"><div class="avatar">${initialOf(e.name)}</div>
         <div><div class="uname">${e.name}</div><div class="uemail">${e.email}</div></div></div></td>
       <td><span class="modeltag"><span class="dot" style="background:${e.color}"></span>${e.model}</span></td>
+      <td><span class="modeltag"><span class="dot" style="background:${e.keyColor}"></span>${e.keyName}</span></td>
       <td class="tid mono">${e.task}</td>
       <td><span class="badge ${e.ok?'ok':'fail'}"><span class="d"></span>${e.ok?'成功':'失败'}</span></td>
       <td class="r"><span class="tval mono">${fmt(e.credits)}</span></td>
@@ -825,7 +830,7 @@ function renderFoot(){
   io.observe(s);
 }
 
-[fMember,fModel].forEach(el=>el.onchange=applyFilter);
+[fMember,fModel,fKey].forEach(el=>el.onchange=applyFilter);
 
 /* ---- 受控异步导出任务 ---- */
 const exportBtn=document.getElementById('exportBtn');
@@ -851,7 +856,8 @@ function startExport(){
 function renderExport(stage,prog,total){
   const f=state.f;
   const scope=[rangeLabel(currentRange.fromIdx,currentRange.toIdx),
-    f.member<0?null:MEMBERS[f.member].name, f.model<0?null:MODELS[f.model].key
+    f.member<0?null:MEMBERS[f.member].name, f.model<0?null:MODELS[f.model].key,
+    f.key<0?null:APIKEYS[f.key].name
   ].filter(Boolean).join(' · ');
   const sizeMB=(total*0.06/1024).toFixed(1);
   let body;
@@ -872,11 +878,11 @@ function renderExport(stage,prog,total){
 
 function doDownload(total){                                   // 仅生成示例上限，演示流式落盘；真实环境后台写 OSS
   const cap=Math.min(total,20000), f=state.f;
-  const lines=[['时间','成员','邮箱','模型','任务ID','消耗积分','状态'].join(',')];
+  const lines=[['时间','成员','邮箱','模型','API 密钥','任务ID','消耗积分','状态'].join(',')];
   let written=0;
   for(let i=f.lo;i<f.hi && written<cap;i++){ const rec=recordAt(i); if(!passFilter(rec,f)) continue;
     const mb=MEMBERS[rec.memberIdx];
-    lines.push([timeFmt(rec.ts),mb.name,mb.email,MODELS[rec.modelIdx].key,rec.task,rec.credits,rec.ok?'成功':'失败'].join(','));
+    lines.push([timeFmt(rec.ts),mb.name,mb.email,MODELS[rec.modelIdx].key,APIKEYS[rec.keyIdx].name,rec.task,rec.credits,rec.ok?'成功':'失败'].join(','));
     written++; }
   const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='consumption-ledger.csv'; a.click();
