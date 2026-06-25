@@ -74,7 +74,7 @@
   .card-sub{font-size:12px;color:var(--ink-3);margin-top:2px;}
 
   /* ---------- KPI ---------- */
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px;}
+  .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:18px;}
   .kpi{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow);}
   .kpi .label{font-size:13px;color:var(--ink-2);margin-bottom:8px;display:flex;align-items:center;gap:5px;}
   .kpi .num{font-size:30px;font-weight:680;letter-spacing:-.6px;line-height:1;}
@@ -226,12 +226,6 @@
       <button data-days="3">近3天</button>
       <button data-days="7" class="active">近7天</button>
     </div>
-    <div class="iconbtn" title="导出">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    </div>
-    <div class="iconbtn" title="设置">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-    </div>
   </div>
 
   <!-- KPIs -->
@@ -250,11 +244,6 @@
       <div class="label">人均消耗</div>
       <div class="num" id="kpi-avg">—</div>
       <div class="delta">积分 / 活跃成员</div>
-    </div>
-    <div class="kpi">
-      <div class="label">峰值单日</div>
-      <div class="num" id="kpi-peak">—</div>
-      <div class="delta" id="kpi-peak-day">—</div>
     </div>
   </div>
 
@@ -314,6 +303,9 @@
         <div class="card-title">成员消耗汇总</div>
         <div class="card-sub">按成员聚合 · 含常用模型与占团队比例，下方明细可逐条下钻</div>
       </div>
+      <button class="card-dl" id="dlMemberDetail" title="导出成员×模型明细（当前时间窗）">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
     </div>
     <table>
       <thead>
@@ -339,10 +331,6 @@
       </div>
     </div>
     <div class="toolbar">
-      <label class="search">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input id="ledgerSearch" placeholder="搜索成员 / 模型 / 任务ID" />
-      </label>
       <select class="fsel" id="fMember"></select>
       <select class="fsel" id="fModel"></select>
       <button class="tbtn" id="exportBtn">
@@ -383,14 +371,14 @@ const MODELS = [
 const DATES = ['Jun 17','Jun 18','Jun 19','Jun 20','Jun 21','Jun 22','Jun 23'];
 const DAY_CURVE = [1.0,0.84,0.70,0.58,0.74,1.12,0.46]; // 形态呼应参考图：中段回落、Jun22 冲高、Jun23 回落
 const MEMBERS = [
-  {name:'Liushuoyang',  email:'liushuoyang@liblib.ai',  act:1.7, aff:{'gpt-5.5':6}},
-  {name:'youzhaoyang',  email:'youzhaoyang@liblib.ai',  act:1.4, aff:{'claude-opus-4-8':4,'gpt-5.5':3}},
-  {name:'Jingmiao',     email:'jingmiao@liblib.ai',     act:1.2, aff:{'claude-opus-4-8':6}},
-  {name:'congmong yang',email:'yangcongming@liblib.ai', act:1.05,aff:{'gpt-5.5-extra-high-fast':6}},
-  {name:'hl zhou',      email:'zhouhl@liblib.ai',       act:0.95,aff:{'claude-opus-4-6':5,'claude-opus-4-8':2}},
-  {name:'Yiyang Chen',  email:'chenyiyang@liblib.ai',   act:0.85,aff:{'composer-2.5':5,'gpt-5.5':2}},
-  {name:'萧帮',          email:'xiaobang@liblib.ai',     act:0.72,aff:{'gpt-5.5':4,'default':2}},
-  {name:'陈发东',        email:'chenfadong@liblib.ai',   act:0.6, aff:{'claude-opus-4-6':3,'gpt-5.5':3}},
+  {name:'Member A', email:'user01@example.com', act:1.7, aff:{'gpt-5.5':6}},
+  {name:'Member B', email:'user02@example.com', act:1.4, aff:{'claude-opus-4-8':4,'gpt-5.5':3}},
+  {name:'Member C', email:'user03@example.com', act:1.2, aff:{'claude-opus-4-8':6}},
+  {name:'Member D', email:'user04@example.com', act:1.05,aff:{'gpt-5.5-extra-high-fast':6}},
+  {name:'Member E', email:'user05@example.com', act:0.95,aff:{'claude-opus-4-6':5,'claude-opus-4-8':2}},
+  {name:'Member F', email:'user06@example.com', act:0.85,aff:{'composer-2.5':5,'gpt-5.5':2}},
+  {name:'Member G', email:'user07@example.com', act:0.72,aff:{'gpt-5.5':4,'default':2}},
+  {name:'Member H', email:'user08@example.com', act:0.6, aff:{'claude-opus-4-6':3,'gpt-5.5':3}},
 ];
 
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
@@ -516,8 +504,6 @@ function renderDashboard(agg){
   document.getElementById('kpi-active').textContent=MEMBERS.length;
   document.getElementById('kpi-seats').textContent=MEMBERS.length;
   document.getElementById('kpi-avg').textContent=fmt(Math.round(agg.total/MEMBERS.length));
-  document.getElementById('kpi-peak').textContent=fmt(agg.byDateTotal[agg.peakIdx]||0);
-  document.getElementById('kpi-peak-day').textContent=agg.dates[agg.peakIdx]||'—';
 
   trendChart.data.labels=agg.dates;
   trendChart.data.datasets.forEach((ds,mdi)=>{ds.data=agg.bdm.map(r=>r[mdi]); ds.pointRadius=agg.dates.length<=1?3:0;});
@@ -631,12 +617,18 @@ function exportMember(){ const a=currentAgg,t=a.total;
   const rows=[['排名','成员','邮箱','常用模型','消耗积分','占比']].concat(
     a.byMember.map((m,i)=>[i+1,m.name,m.email,m.fav.key,m.total,(t?m.total/t*100:0).toFixed(1)+'%']));
   downloadCSV(`member-consumption-${rangeTag()}.csv`,rows); }
+function exportMemberDetail(){ const a=currentAgg,t=a.total;
+  const head=['排名','成员','邮箱','常用模型'].concat(MODELS.map(m=>m.key)).concat(['消耗积分','占比']);
+  const rows=[head].concat(a.byMember.map((m,i)=>
+    [i+1,m.name,m.email,m.fav.key].concat(m.perModel).concat([m.total,(t?m.total/t*100:0).toFixed(1)+'%'])));
+  downloadCSV(`member-detail-${rangeTag()}.csv`,rows); }
 function exportTime(){ const a=currentAgg;
   const rows=[['日期'].concat(MODELS.map(m=>m.key)).concat(['当日合计'])].concat(
     a.dates.map((d,k)=>[d].concat(a.bdm[k]).concat([a.byDateTotal[k]])));
   downloadCSV(`time-consumption-${rangeTag()}.csv`,rows); }
 document.getElementById('dlModel').onclick=exportModel;
 document.getElementById('dlMember').onclick=exportMember;
+document.getElementById('dlMemberDetail').onclick=exportMemberDetail;
 document.getElementById('dlTrend').onclick=exportTime;
 
 /* ============ 消耗明细：服务端分页 + 时间窗 + 懒加载(500) + 在线上限(1000) + 受控异步导出 ============ */
@@ -650,10 +642,6 @@ function windowEnd(days){ let end=0,c=0; for(const b of blocks){ if(c>=days) bre
 function passFilter(rec,f){
   if(f.member>=0 && rec.memberIdx!==f.member) return false;
   if(f.model >=0 && rec.modelIdx !==f.model)  return false;
-  if(f.q){
-    const hay=(MEMBERS[rec.memberIdx].name+MEMBERS[rec.memberIdx].email+MODELS[rec.modelIdx].key+rec.task).toLowerCase();
-    if(!hay.includes(f.q)) return false;
-  }
   return true;
 }
 function mapRow(rec){
@@ -675,7 +663,6 @@ function apiPage(f,cursor,limit){ return new Promise(res=>setTimeout(()=>{
 const elBody=document.getElementById('ledgerBody');
 const elSum =document.getElementById('ledgerSum');
 const elFoot=document.getElementById('ledgerFoot');
-const elSearch=document.getElementById('ledgerSearch');
 function opt(sel,v,t){const o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o);}
 const fMember=document.getElementById('fMember'); opt(fMember,'-1','全部成员'); MEMBERS.forEach((m,i)=>opt(fMember,i,m.name));
 const fModel =document.getElementById('fModel');  opt(fModel,'-1','全部模型');  MODELS.forEach((m,i)=>opt(fModel,i,m.key));
@@ -685,8 +672,7 @@ let queryToken=0, io;
 
 function readFilters(){
   const b=rawBounds(currentRange.fromIdx,currentRange.toIdx);
-  return {member:+fMember.value,model:+fModel.value,
-          q:elSearch.value.trim().toLowerCase(),lo:b.lo,hi:b.hi};
+  return {member:+fMember.value,model:+fModel.value,lo:b.lo,hi:b.hi};
 }
 
 async function applyFilter(){
@@ -746,7 +732,6 @@ function renderFoot(){
 }
 
 [fMember,fModel].forEach(el=>el.onchange=applyFilter);
-let searchTimer; elSearch.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(applyFilter,300);};
 
 /* ---- 受控异步导出任务 ---- */
 const exportBtn=document.getElementById('exportBtn');
