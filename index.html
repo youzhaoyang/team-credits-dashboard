@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>团队积分消耗</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#f5f5f6;
+    --card:#ffffff;
+    --border:#ebebed;
+    --border-strong:#e0e0e3;
+    --ink:#1d1d1f;
+    --ink-2:#6e6e73;
+    --ink-3:#9a9aa0;
+    --pill:#f0f0f2;
+    --line:#9a9aa0;
+    --shadow:0 1px 2px rgba(0,0,0,.04), 0 1px 3px rgba(0,0,0,.03);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,"PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    font-size:14px;
+    line-height:1.45;
+  }
+  .wrap{max-width:1240px;margin:0 auto;padding:28px 24px 60px;}
+
+  /* ---------- Top bar ---------- */
+  .topbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:22px;}
+  .title{font-size:20px;font-weight:650;letter-spacing:-.2px;margin-right:6px;}
+  .demo-tag{font-size:11px;color:var(--ink-3);border:1px solid var(--border-strong);
+    border-radius:6px;padding:2px 7px;background:#fafafa;}
+  .spacer{flex:1;}
+  .daterange{display:flex;align-items:center;gap:7px;border:1px solid var(--border-strong);
+    background:#fff;border-radius:9px;padding:7px 12px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;color:var(--ink);}
+  .daterange:hover{background:#fafafa;}
+  .daterange .chev{color:var(--ink-3);font-size:11px;}
+  .daterange-wrap{position:relative;}
+  .date-pop{position:absolute;top:42px;right:0;z-index:30;background:#fff;border:1px solid var(--border-strong);
+    border-radius:14px;box-shadow:0 10px 32px rgba(0,0,0,.13);padding:14px 16px 12px;width:300px;}
+  .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+  .cal-title{font-size:14px;font-weight:600;}
+  .cal-arrow{width:28px;height:28px;border:0;background:transparent;border-radius:8px;cursor:pointer;color:var(--ink-2);font-size:17px;line-height:1;}
+  .cal-arrow:hover{background:#f0f0f2;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);}
+  .cal-dow{margin-bottom:2px;}
+  .cal-dow span{text-align:center;font-size:12px;color:var(--ink-3);padding:5px 0;}
+  .cal-cell{height:36px;display:flex;align-items:center;justify-content:center;font-size:13px;border:0;
+    background:transparent;cursor:pointer;color:var(--ink);font-family:inherit;}
+  .cal-cell.empty{visibility:hidden;cursor:default;}
+  .cal-cell.disabled{color:var(--ink-3);opacity:.32;cursor:default;}
+  .cal-cell:not(.disabled):not(.endpoint):hover{background:#f0f0f2;border-radius:9px;}
+  .cal-cell.in-range{background:#eef2fb;}
+  .cal-cell.endpoint{background:#4f74c9;color:#fff;font-weight:600;border-radius:9px;}
+  .dp-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;}
+  .seg{display:flex;background:#fff;border:1px solid var(--border-strong);border-radius:9px;padding:3px;gap:2px;}
+  .seg button{border:0;background:transparent;font:inherit;font-size:13px;color:var(--ink-2);
+    padding:5px 13px;border-radius:7px;cursor:pointer;font-weight:500;}
+  .seg button.active{background:#e9e9ec;color:var(--ink);font-weight:600;}
+  .iconbtn{width:34px;height:34px;border-radius:9px;border:1px solid var(--border-strong);background:#fff;
+    display:flex;align-items:center;justify-content:center;color:var(--ink-2);cursor:pointer;}
+  .iconbtn svg{width:16px;height:16px;}
+
+  /* ---------- Cards ---------- */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);}
+  .card-pad{padding:22px 24px;}
+  .card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+  .card-title{font-size:15px;font-weight:600;letter-spacing:-.1px;}
+  .card-sub{font-size:12px;color:var(--ink-3);margin-top:2px;}
+
+  /* ---------- KPI ---------- */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px;}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow);}
+  .kpi .label{font-size:13px;color:var(--ink-2);margin-bottom:8px;display:flex;align-items:center;gap:5px;}
+  .kpi .num{font-size:30px;font-weight:680;letter-spacing:-.6px;line-height:1;}
+  .kpi .delta{font-size:12px;margin-top:9px;color:var(--ink-3);}
+  .kpi .delta b{font-weight:600;}
+  .up{color:#2f9e6f;}
+  .down{color:#c2603a;}
+  .q{width:14px;height:14px;border-radius:50%;border:1px solid var(--ink-3);color:var(--ink-3);
+    font-size:9px;display:inline-flex;align-items:center;justify-content:center;cursor:default;}
+
+  /* ---------- layout rows ---------- */
+  .full{margin-bottom:18px;}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;}
+  .chart-box{position:relative;margin-top:14px;}
+  .chart-box.tall{height:300px;}
+  .chart-box.mid{height:272px;}
+
+  /* ---------- legend ---------- */
+  .legend{display:flex;flex-wrap:wrap;gap:16px 20px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);}
+  .legend .item{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-2);cursor:pointer;user-select:none;}
+  .legend .dot{width:11px;height:11px;border-radius:50%;flex:none;}
+  .legend .item.off{opacity:.38;}
+  .legend .item.off .lbl{text-decoration:line-through;}
+
+  .foot-icons{display:flex;justify-content:flex-end;gap:14px;margin-top:14px;color:var(--ink-3);}
+  .foot-icons svg{width:17px;height:17px;cursor:pointer;}
+  .foot-icons svg:hover{color:var(--ink-2);}
+
+  /* ---------- model list ---------- */
+  .mlist{margin-top:18px;display:flex;flex-direction:column;gap:2px;}
+  .mrow{display:grid;grid-template-columns:18px 1fr auto auto;align-items:center;gap:11px;padding:8px 4px;border-radius:8px;}
+  .mrow:hover{background:#fafafa;}
+  .mrow .dot{width:11px;height:11px;border-radius:50%;}
+  .mrow .mname{font-size:13.5px;font-weight:500;}
+  .mrow .mval{font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;}
+  .mrow .mpct{font-size:12px;color:var(--ink-3);width:46px;text-align:right;font-variant-numeric:tabular-nums;}
+
+  /* ---------- table ---------- */
+  table{width:100%;border-collapse:collapse;margin-top:8px;}
+  thead th{text-align:left;font-size:12px;font-weight:500;color:var(--ink-3);padding:12px 8px;border-bottom:1px solid var(--border);}
+  thead th.r,tbody td.r{text-align:right;}
+  tbody td{padding:14px 8px;border-bottom:1px solid var(--border);font-size:13.5px;vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:0;}
+  .rank{color:var(--ink-3);width:26px;font-variant-numeric:tabular-nums;}
+  .user{display:flex;align-items:center;gap:12px;}
+  .avatar{width:34px;height:34px;border-radius:50%;background:#ededf0;color:var(--ink-2);
+    display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex:none;}
+  .uname{font-weight:550;}
+  .uemail{font-size:12px;color:var(--ink-3);}
+  .modeltag{display:inline-flex;align-items:center;gap:7px;}
+  .modeltag .dot{width:9px;height:9px;border-radius:50%;}
+  .barcell{min-width:160px;}
+  .minibar{height:7px;border-radius:4px;background:#eee;overflow:hidden;margin-top:6px;}
+  .minibar > span{display:block;height:100%;border-radius:4px;}
+  .tval{font-weight:650;font-variant-numeric:tabular-nums;}
+  .tpct{font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums;}
+
+  /* ---------- ledger toolbar ---------- */
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:18px 0 6px;}
+  .search{display:flex;align-items:center;gap:8px;border:1px solid var(--border-strong);border-radius:9px;
+    padding:8px 11px;background:#fff;flex:1;min-width:200px;}
+  .search svg{width:15px;height:15px;color:var(--ink-3);flex:none;}
+  .search input{border:0;outline:0;font:inherit;font-size:13px;width:100%;background:transparent;color:var(--ink);}
+  .fsel{border:1px solid var(--border-strong);border-radius:9px;padding:8px 11px;background:#fff;
+    font:inherit;font-size:13px;color:var(--ink);cursor:pointer;}
+  .tbtn{border:1px solid var(--border-strong);border-radius:9px;padding:8px 13px;background:#fff;
+    font:inherit;font-size:13px;color:var(--ink-2);cursor:pointer;display:flex;align-items:center;gap:6px;}
+  .tbtn:hover{background:#fafafa;}
+  .tbtn svg{width:14px;height:14px;}
+  .ledger-sum{font-size:12.5px;color:var(--ink-3);margin:4px 0 8px;}
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 9px;border-radius:20px;font-weight:500;}
+  .badge.ok{background:#eaf6f0;color:#2f9e6f;}
+  .badge.fail{background:#fbeee8;color:#c2603a;}
+  .badge .d{width:6px;height:6px;border-radius:50%;background:currentColor;}
+  .mono{font-variant-numeric:tabular-nums;}
+  .tid{color:var(--ink-3);font-size:12.5px;}
+  .cell-time{color:var(--ink-2);font-size:13px;}
+  .pager{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:16px;font-size:13px;color:var(--ink-2);}
+  .pager button{border:1px solid var(--border-strong);background:#fff;border-radius:8px;padding:6px 13px;
+    font:inherit;font-size:13px;cursor:pointer;color:var(--ink);}
+  .pager button:hover:not(:disabled){background:#fafafa;}
+  .pager button:disabled{opacity:.4;cursor:default;}
+
+  /* ---------- card-head download ---------- */
+  .card-dl{width:30px;height:30px;border-radius:8px;border:1px solid var(--border-strong);background:#fff;
+    display:flex;align-items:center;justify-content:center;color:var(--ink-3);cursor:pointer;flex:none;}
+  .card-dl:hover{color:var(--ink-2);background:#fafafa;}
+  .card-dl svg{width:15px;height:15px;}
+
+  /* ---------- lazy-load footer / cap banner / export task ---------- */
+  .tbtn.primary{background:#1d1d1f;color:#fff;border-color:#1d1d1f;}
+  .tbtn.primary:hover{background:#000;}
+  .ledger-foot{margin-top:16px;display:flex;justify-content:center;}
+  .tbtn.loadmore{min-width:210px;justify-content:center;}
+  #sentinel{height:1px;}
+  .foot-load{display:flex;align-items:center;gap:9px;color:var(--ink-2);font-size:13px;padding:8px;}
+  .spin{width:15px;height:15px;border:2px solid #d8d8dc;border-top-color:#8a8a8e;border-radius:50%;animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .foot-done{color:var(--ink-3);font-size:13px;padding:8px;}
+  .cap-banner{width:100%;display:flex;align-items:center;justify-content:space-between;gap:16px;
+    background:#fbf6ee;border:1px solid #efe2cd;border-radius:12px;padding:14px 16px;font-size:13px;color:#7a5a2e;}
+  .cap-banner b{color:#5f4517;}
+  .export-card{margin-top:16px;border:1px solid var(--border);border-radius:14px;background:#fafafa;padding:16px 18px;}
+  .ex-row{display:flex;gap:14px;align-items:flex-start;}
+  .ex-ico{width:36px;height:36px;border-radius:10px;background:#ececef;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--ink-2);flex:none;}
+  .ex-main{flex:1;display:flex;flex-direction:column;gap:8px;}
+  .ex-state{font-size:12.5px;font-weight:600;width:max-content;padding:3px 10px;border-radius:20px;}
+  .ex-state.queued{background:#eceef3;color:#5b6270;}
+  .ex-state.proc{background:#eef3fb;color:#3f6bb0;}
+  .ex-state.done{background:#eaf6f0;color:#2f9e6f;}
+  .ex-bar{height:7px;background:#e7e7ea;border-radius:5px;overflow:hidden;max-width:340px;}
+  .ex-bar>span{display:block;height:100%;background:#6f7bc9;border-radius:5px;transition:width .18s;}
+  .ex-meta{font-size:12.5px;color:var(--ink-3);}
+  .ex-actions{display:flex;gap:8px;margin-top:2px;}
+  .ex-actions .tbtn{width:max-content;}
+  .ex-guard{margin-top:12px;padding-top:10px;border-top:1px dashed var(--border-strong);font-size:11.5px;color:var(--ink-3);}
+
+  @media (max-width:860px){
+    .kpis{grid-template-columns:repeat(2,1fr);}
+    .cols{grid-template-columns:1fr;}
+    .uemail{display:none;}
+    .toolbar{flex-direction:column;align-items:stretch;}
+    .cap-banner{flex-direction:column;align-items:flex-start;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- top bar -->
+  <div class="topbar">
+    <span class="title">团队积分消耗</span>
+    <span class="demo-tag">示例数据</span>
+    <span class="spacer"></span>
+    <div class="daterange-wrap">
+      <button class="daterange" id="dateBtn"><span id="dateLabel">Jun 17 – Jun 23</span> <span class="chev">▾</span></button>
+      <div class="date-pop" id="datePop" hidden>
+        <div class="cal-head">
+          <span class="cal-title" id="calTitle">June 2026</span>
+          <span><button class="cal-arrow" id="calPrev">‹</button><button class="cal-arrow" id="calNext">›</button></span>
+        </div>
+        <div class="cal-grid cal-dow" id="calDow"></div>
+        <div class="cal-grid" id="calDays"></div>
+        <div class="dp-actions"><button class="tbtn" id="dpCancel">取消</button><button class="tbtn primary" id="dpApply">应用</button></div>
+      </div>
+    </div>
+    <div class="seg">
+      <button data-days="1">近1天</button>
+      <button data-days="3">近3天</button>
+      <button data-days="7" class="active">近7天</button>
+    </div>
+    <div class="iconbtn" title="导出">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </div>
+    <div class="iconbtn" title="设置">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpis">
+    <div class="kpi">
+      <div class="label">团队总消耗积分 <span class="q" title="所选周期内全部成员消耗的积分合计">?</span></div>
+      <div class="num" id="kpi-total">—</div>
+      <div class="delta">较上周 <b class="up" id="kpi-total-wow">—</b></div>
+    </div>
+    <div class="kpi">
+      <div class="label">成员</div>
+      <div class="num" id="kpi-active">—</div>
+      <div class="delta">共 <b id="kpi-seats">—</b> 个席位</div>
+    </div>
+    <div class="kpi">
+      <div class="label">人均消耗</div>
+      <div class="num" id="kpi-avg">—</div>
+      <div class="delta">积分 / 活跃成员</div>
+    </div>
+    <div class="kpi">
+      <div class="label">峰值单日</div>
+      <div class="num" id="kpi-peak">—</div>
+      <div class="delta" id="kpi-peak-day">—</div>
+    </div>
+  </div>
+
+  <!-- TIME trend -->
+  <div class="card card-pad full">
+    <div class="card-head">
+      <div>
+        <div class="card-title">消耗趋势</div>
+        <div class="card-sub">按日积分消耗，按模型堆叠 · 点击下方图例可隐藏对应模型</div>
+      </div>
+    </div>
+    <div class="chart-box tall"><canvas id="trendChart"></canvas></div>
+    <div class="legend" id="trendLegend"></div>
+    <div class="foot-icons">
+      <svg id="dlTrend" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="下载图表"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="查看数据"><polyline points="8 7 3 12 8 17"/><polyline points="16 7 21 12 16 17"/></svg>
+    </div>
+  </div>
+
+  <!-- MODEL + MEMBER -->
+  <div class="cols">
+    <!-- model -->
+    <div class="card card-pad">
+      <div class="card-head">
+        <div>
+          <div class="card-title">模型消耗占比</div>
+          <div class="card-sub">不同模型的积分单价不同，高级模型权重更高</div>
+        </div>
+        <button class="card-dl" id="dlModel" title="导出模型消耗（当前时间窗）">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div class="chart-box mid" style="width:46%;"><canvas id="modelChart"></canvas></div>
+        <div class="mlist" id="modelList" style="flex:1;"></div>
+      </div>
+    </div>
+    <!-- member -->
+    <div class="card card-pad">
+      <div class="card-head">
+        <div>
+          <div class="card-title">成员消耗 TOP</div>
+          <div class="card-sub">按积分消耗排序的成员</div>
+        </div>
+        <button class="card-dl" id="dlMember" title="导出成员消耗（当前时间窗）">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+      </div>
+      <div class="chart-box mid"><canvas id="memberChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- MEMBER detail table -->
+  <div class="card card-pad full">
+    <div class="card-head">
+      <div>
+        <div class="card-title">成员消耗汇总</div>
+        <div class="card-sub">按成员聚合 · 含常用模型与占团队比例，下方明细可逐条下钻</div>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="rank">#</th>
+          <th>成员</th>
+          <th>常用模型</th>
+          <th class="barcell">消耗分布</th>
+          <th class="r">消耗积分</th>
+          <th class="r">占比</th>
+        </tr>
+      </thead>
+      <tbody id="memberTable"></tbody>
+    </table>
+  </div>
+
+  <!-- CONSUMPTION LEDGER -->
+  <div class="card card-pad full">
+    <div class="card-head">
+      <div>
+        <div class="card-title">消耗明细</div>
+        <div class="card-sub">服务端分页 · 跟随顶部时间窗 · 筛选后在线最多 1000 条（每次懒加载 500），超出请导出</div>
+      </div>
+    </div>
+    <div class="toolbar">
+      <label class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="ledgerSearch" placeholder="搜索成员 / 模型 / 任务ID" />
+      </label>
+      <select class="fsel" id="fMember"></select>
+      <select class="fsel" id="fModel"></select>
+      <button class="tbtn" id="exportBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        导出 CSV
+      </button>
+    </div>
+    <div class="ledger-sum" id="ledgerSum"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>时间</th>
+          <th>成员</th>
+          <th>模型</th>
+          <th>任务ID</th>
+          <th>状态</th>
+          <th class="r">消耗积分</th>
+        </tr>
+      </thead>
+      <tbody id="ledgerBody"></tbody>
+    </table>
+    <div id="ledgerFoot" class="ledger-foot"></div>
+    <div id="exportCard" class="export-card" hidden></div>
+  </div>
+
+</div>
+
+<script>
+/* ============ 模型 / 成员 / 时间 三维消耗数据（确定性生成，三视图同源对账） ============ */
+const MODELS = [
+  {key:'gpt-5.5',                 color:'#4f9e77', w:1.0},
+  {key:'claude-opus-4-8',         color:'#8fc1e3', w:2.2},
+  {key:'gpt-5.5-extra-high-fast', color:'#6f7bc9', w:1.8},
+  {key:'claude-opus-4-6',         color:'#e3a85c', w:1.6},
+  {key:'composer-2.5',            color:'#b06a3a', w:0.6},
+  {key:'default',                 color:'#d6c247', w:0.4},
+];
+const DATES = ['Jun 17','Jun 18','Jun 19','Jun 20','Jun 21','Jun 22','Jun 23'];
+const DAY_CURVE = [1.0,0.84,0.70,0.58,0.74,1.12,0.46]; // 形态呼应参考图：中段回落、Jun22 冲高、Jun23 回落
+const MEMBERS = [
+  {name:'Liushuoyang',  email:'liushuoyang@liblib.ai',  act:1.7, aff:{'gpt-5.5':6}},
+  {name:'youzhaoyang',  email:'youzhaoyang@liblib.ai',  act:1.4, aff:{'claude-opus-4-8':4,'gpt-5.5':3}},
+  {name:'Jingmiao',     email:'jingmiao@liblib.ai',     act:1.2, aff:{'claude-opus-4-8':6}},
+  {name:'congmong yang',email:'yangcongming@liblib.ai', act:1.05,aff:{'gpt-5.5-extra-high-fast':6}},
+  {name:'hl zhou',      email:'zhouhl@liblib.ai',       act:0.95,aff:{'claude-opus-4-6':5,'claude-opus-4-8':2}},
+  {name:'Yiyang Chen',  email:'chenyiyang@liblib.ai',   act:0.85,aff:{'composer-2.5':5,'gpt-5.5':2}},
+  {name:'萧帮',          email:'xiaobang@liblib.ai',     act:0.72,aff:{'gpt-5.5':4,'default':2}},
+  {name:'陈发东',        email:'chenfadong@liblib.ai',   act:0.6, aff:{'claude-opus-4-6':3,'gpt-5.5':3}},
+];
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const fmt = n=> n.toLocaleString('en-US');
+
+/* ============ 模拟后端：记录不在前端落地，按 index 确定性生成（演示“前端只装一页”） ============ */
+const SCENES   = ['Agent 编辑','Plan 生成','云端 Agent','对话消息','Tab 补全'];
+const SCENE_W  = [0.22,0.10,0.08,0.34,0.26];
+const MEMBER_W = MEMBERS.map(m=>m.act);
+const MODEL_W  = [0.30,0.16,0.10,0.12,0.18,0.14];           // 调用“次数”占比（与积分单价权重不同）
+const DAY_COUNT= DAY_CURVE.map(c=>Math.round(c*11000));     // 大客户级别：单日约万条
+const TOTAL    = DAY_COUNT.reduce((a,b)=>a+b,0);            // 本窗口（Jun17–23）服务端总条数
+
+// 时间倒序：index 0 = 最新。按“日历倒序”把 index 切成 7 个块
+const descDays = [6,5,4,3,2,1,0];
+const blocks = []; { let acc=0; descDays.forEach(di=>{ const n=DAY_COUNT[di]; blocks.push({di,lo:acc,hi:acc+n,n}); acc+=n; }); }
+function blockOf(i){ for(const b of blocks) if(i<b.hi) return b; return blocks[blocks.length-1]; }
+function pickW(r,w){ let s=0; for(const x of w) s+=x; let v=r*s,k=0; while(k<w.length-1 && v>=w[k]){v-=w[k];k++;} return k; }
+function rngAt(i){ return mulberry32((i*2654435761 ^ 0x9e3779b9)>>>0); }
+
+// 单条记录（聚合接口与分页接口共用同一生成器 → 两条读路径天然对账）
+function recordAt(i){
+  const b=blockOf(i), di=b.di, r=rngAt(i);
+  const memberIdx=pickW(r(),MEMBER_W);
+  const modelIdx =pickW(r(),MODEL_W);
+  const sceneIdx =pickW(r(),SCENE_W);
+  const credits  =Math.round((26+r()*210)*MODELS[modelIdx].w);
+  const ok       =r()>0.055;
+  const task     ='#'+Math.floor(r()*0xffffff).toString(16).padStart(6,'0');
+  const p=(i-b.lo)/b.n;                                      // 块内也按时间倒序铺满当天
+  const ts=new Date(Date.UTC(2026,5,17+di) + (1-p)*86400000 - 1000);
+  return {i,di,memberIdx,modelIdx,sceneIdx,credits,ok,ts,task};
+}
+
+/* ============ 全局时间窗 + 聚合（图表 / KPI / 汇总 / 明细 / 导出 全部跟随）============ */
+let currentRange={fromIdx:0,toIdx:DATES.length-1}, currentAgg=null;
+const blockByDay={}; blocks.forEach(b=>blockByDay[b.di]=b);
+// 任意日历区间 [fromIdx..toIdx] → 原始 index 边界 [lo,hi)（desc 块连续，故区间也连续）
+function rawBounds(fromIdx,toIdx){ return {lo:blockByDay[toIdx].lo, hi:blockByDay[fromIdx].hi}; }
+const rangeLabel=(f,t)=> f===t ? DATES[t] : (DATES[f]+' – '+DATES[t]);
+const rangeTag=()=> (DATES[currentRange.fromIdx]+'_'+DATES[currentRange.toIdx]).replace(/\s+/g,'');
+
+// 聚合接口：按所选区间扫描一次，只累加、不返回明细（等价后端预聚合表，与 TOTAL 大小无关）
+function aggregate(fromIdx,toIdx){
+  const {lo,hi}=rawBounds(fromIdx,toIdx);
+  const dayIdxs=[]; for(let d=fromIdx;d<=toIdx;d++) dayIdxs.push(d);   // 区间内自然日（时间正序）
+  const pos={}; dayIdxs.forEach((di,k)=>pos[di]=k);
+  const bdm=dayIdxs.map(()=>MODELS.map(()=>0));
+  const bm =MEMBERS.map(()=>({total:0,perModel:MODELS.map(()=>0)}));
+  for(let i=lo;i<hi;i++){
+    const rec=recordAt(i); const k=pos[rec.di]; if(k===undefined) continue;
+    bdm[k][rec.modelIdx]+=rec.credits;
+    const o=bm[rec.memberIdx]; o.total+=rec.credits; o.perModel[rec.modelIdx]+=rec.credits;
+  }
+  const dates=dayIdxs.map(di=>DATES[di]);
+  const byDateTotal=bdm.map(r=>r.reduce((a,b)=>a+b,0));
+  const total=byDateTotal.reduce((a,b)=>a+b,0);
+  const byModel=MODELS.map((_,mdi)=>bdm.reduce((s,r)=>s+r[mdi],0));
+  const byMember=MEMBERS.map((mb,mi)=>{
+    const o=bm[mi]; let f=0; o.perModel.forEach((v,k)=>{if(v>o.perModel[f])f=k;});
+    return {name:mb.name,email:mb.email,total:o.total,perModel:o.perModel.slice(),fav:MODELS[f]};
+  }).sort((a,b)=>b.total-a.total);
+  const peakIdx=byDateTotal.indexOf(Math.max(...byDateTotal));
+  return {dates,bdm,byDateTotal,total,byModel,byMember,peakIdx};
+}
+
+/* ---------- Chart.js defaults ---------- */
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.font.size = 12;
+Chart.defaults.color = '#9a9aa0';
+const GRID = '#f0f0f2';
+
+/* ---------- charts（先空建，由 setRange 填充）---------- */
+const trendChart = new Chart(document.getElementById('trendChart'),{
+  type:'line',
+  data:{ labels:[], datasets:MODELS.map(md=>({
+    label:md.key, data:[], borderColor:md.color, backgroundColor:md.color+'cc',
+    fill:true, tension:0.34, pointRadius:0, pointHoverRadius:4, borderWidth:1.2,
+  })) },
+  options:{ maintainAspectRatio:false, responsive:true, interaction:{mode:'index',intersect:false},
+    scales:{ x:{grid:{display:false},border:{display:false},ticks:{padding:8}},
+      y:{stacked:true,beginAtZero:true,grid:{color:GRID},border:{display:false},ticks:{padding:8,callback:v=>v>=1000?(v/1000)+'k':v}} },
+    plugins:{legend:{display:false},
+      tooltip:{backgroundColor:'#fff',titleColor:'#1d1d1f',bodyColor:'#1d1d1f',borderColor:'#e0e0e3',borderWidth:1,padding:12,boxPadding:5,cornerRadius:10,titleFont:{weight:'600'},displayColors:true,usePointStyle:true,
+        callbacks:{label:c=>'  '+c.dataset.label+'   '+fmt(c.parsed.y), footer:items=>'合计   '+fmt(items.reduce((s,i)=>s+i.parsed.y,0))},
+        footerColor:'#1d1d1f',footerFont:{weight:'600'},footerMarginTop:8}}
+  }
+});
+const tl=document.getElementById('trendLegend');
+MODELS.forEach((md,i)=>{
+  const el=document.createElement('div'); el.className='item';
+  el.innerHTML=`<span class="dot" style="background:${md.color}"></span><span class="lbl">${md.key}</span>`;
+  el.onclick=()=>{const vis=trendChart.isDatasetVisible(i);trendChart.setDatasetVisibility(i,!vis);trendChart.update();el.classList.toggle('off',vis);};
+  tl.appendChild(el);
+});
+
+const modelChart = new Chart(document.getElementById('modelChart'),{
+  type:'doughnut',
+  data:{labels:MODELS.map(m=>m.key),datasets:[{data:[],backgroundColor:MODELS.map(m=>m.color),borderColor:'#fff',borderWidth:2,hoverOffset:6}]},
+  options:{maintainAspectRatio:false,responsive:true,cutout:'64%',
+    plugins:{legend:{display:false},
+      tooltip:{backgroundColor:'#fff',titleColor:'#1d1d1f',bodyColor:'#1d1d1f',borderColor:'#e0e0e3',borderWidth:1,padding:10,cornerRadius:10,
+        callbacks:{label:c=>{const t=c.dataset.data.reduce((a,b)=>a+b,0)||1;return ' '+fmt(c.parsed)+'  ('+(c.parsed/t*100).toFixed(1)+'%)';}}}}
+  }
+});
+
+const memberChart = new Chart(document.getElementById('memberChart'),{
+  type:'bar',
+  data:{labels:[],datasets:[{data:[],backgroundColor:[],borderRadius:5,barThickness:16}]},
+  options:{indexAxis:'y',maintainAspectRatio:false,responsive:true,
+    scales:{x:{beginAtZero:true,grid:{color:GRID},border:{display:false},ticks:{callback:v=>v>=1000?(v/1000)+'k':v}},
+      y:{grid:{display:false},border:{display:false},ticks:{font:{size:12.5},color:'#1d1d1f'}}},
+    plugins:{legend:{display:false},
+      tooltip:{backgroundColor:'#fff',titleColor:'#1d1d1f',bodyColor:'#1d1d1f',borderColor:'#e0e0e3',borderWidth:1,padding:10,cornerRadius:10,callbacks:{label:c=>' '+fmt(c.parsed.x)+' 积分'}}}
+  }
+});
+
+/* ---------- 渲染整个看板（KPI + 三图 + 汇总表）---------- */
+function renderDashboard(agg){
+  document.getElementById('kpi-total').textContent=fmt(agg.total);
+  const prev=Math.round(agg.total*0.86), wow=prev?((agg.total-prev)/prev*100):0;
+  const we=document.getElementById('kpi-total-wow'); we.textContent=(wow>=0?'+':'')+wow.toFixed(1)+'%'; we.className=wow>=0?'up':'down';
+  document.getElementById('kpi-active').textContent=MEMBERS.length;
+  document.getElementById('kpi-seats').textContent=MEMBERS.length;
+  document.getElementById('kpi-avg').textContent=fmt(Math.round(agg.total/MEMBERS.length));
+  document.getElementById('kpi-peak').textContent=fmt(agg.byDateTotal[agg.peakIdx]||0);
+  document.getElementById('kpi-peak-day').textContent=agg.dates[agg.peakIdx]||'—';
+
+  trendChart.data.labels=agg.dates;
+  trendChart.data.datasets.forEach((ds,mdi)=>{ds.data=agg.bdm.map(r=>r[mdi]); ds.pointRadius=agg.dates.length<=1?3:0;});
+  trendChart.update();
+
+  modelChart.data.datasets[0].data=agg.byModel; modelChart.update();
+  const ml=document.getElementById('modelList'); ml.innerHTML='';
+  MODELS.map((m,i)=>({m,v:agg.byModel[i]})).sort((a,b)=>b.v-a.v).forEach(({m,v})=>{
+    const r=document.createElement('div'); r.className='mrow';
+    r.innerHTML=`<span class="dot" style="background:${m.color}"></span><span class="mname">${m.key}</span><span class="mval">${fmt(v)}</span><span class="mpct">${agg.total?(v/agg.total*100).toFixed(1):'0.0'}%</span>`;
+    ml.appendChild(r);
+  });
+
+  memberChart.data.labels=agg.byMember.map(m=>m.name);
+  memberChart.data.datasets[0].data=agg.byMember.map(m=>m.total);
+  memberChart.data.datasets[0].backgroundColor=agg.byMember.map(m=>m.fav.color);
+  memberChart.update();
+
+  const tb=document.getElementById('memberTable'); tb.innerHTML='';
+  const maxTotal=agg.byMember[0]?(agg.byMember[0].total||1):1;
+  agg.byMember.forEach((m,i)=>{
+    const ini=m.name.replace(/[^A-Za-z\u4e00-\u9fa5]/g,'').slice(0,1).toUpperCase()||'·';
+    let segs=''; m.perModel.forEach((v,mdi)=>{ if(v>0&&m.total) segs+=`<span style="background:${MODELS[mdi].color};width:${v/m.total*100}%"></span>`; });
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td class="rank">${i+1}</td>
+      <td><div class="user"><div class="avatar">${ini}</div>
+        <div><div class="uname">${m.name}</div><div class="uemail">${m.email}</div></div></div></td>
+      <td><span class="modeltag"><span class="dot" style="background:${m.fav.color}"></span>${m.fav.key}</span></td>
+      <td class="barcell"><div class="minibar" style="display:flex;width:${Math.max(28,m.total/maxTotal*100)}%">${segs}</div></td>
+      <td class="r"><span class="tval">${fmt(m.total)}</span></td>
+      <td class="r"><span class="tpct">${agg.total?(m.total/agg.total*100).toFixed(1):'0.0'}%</span></td>`;
+    tb.appendChild(tr);
+  });
+}
+
+/* ---------- 切换时间区间：KPI / 三图 / 汇总 / 明细 / 导出 全部联动重算 ---------- */
+function setRange(fromIdx,toIdx){
+  if(fromIdx>toIdx){const x=fromIdx;fromIdx=toIdx;toIdx=x;}
+  currentRange={fromIdx,toIdx};
+  currentAgg=aggregate(fromIdx,toIdx);
+  renderDashboard(currentAgg);
+  document.getElementById('dateLabel').textContent=rangeLabel(fromIdx,toIdx);
+  // 区间匹配 近1/3/7 预设则高亮，否则视为自定义、清空高亮
+  const presetDays=(toIdx===DATES.length-1)?(toIdx-fromIdx+1):0;
+  document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('active',+b.dataset.days===presetDays));
+  if(typeof applyFilter==='function') applyFilter();        // 明细跟随同一区间重查
+}
+// 预设：近 N 天 = 锚定最新一天往前 N 天
+document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>setRange(DATES.length-+b.dataset.days,DATES.length-1));
+
+// 自定义区间日历选择器
+(function(){
+  const btn=document.getElementById('dateBtn'), pop=document.getElementById('datePop');
+  const titleEl=document.getElementById('calTitle'), dowEl=document.getElementById('calDow'), daysEl=document.getElementById('calDays');
+  dowEl.innerHTML=['Su','Mo','Tu','We','Th','Fr','Sa'].map(d=>`<span>${d}</span>`).join('');
+  // 数据可用范围（与 DATES 对齐：2026-06-17 起，共 DATES.length 天）
+  const AY=2026, AM=5, A_FROM=17, A_TO=17+DATES.length-1;
+  const k=(y,m,d)=>y*10000+m*100+d;
+  const inData=(y,m,d)=> y===AY&&m===AM&&d>=A_FROM&&d<=A_TO;
+  let viewY=AY, viewM=AM, selS=null, selE=null;   // {y,m,d}
+
+  function render(){
+    titleEl.textContent=new Date(viewY,viewM,1).toLocaleString('en-US',{month:'long',year:'numeric'});
+    const first=new Date(viewY,viewM,1).getDay(), dim=new Date(viewY,viewM+1,0).getDate();
+    const sK=selS&&k(selS.y,selS.m,selS.d), eK=selE&&k(selE.y,selE.m,selE.d);
+    let html='';
+    for(let i=0;i<first;i++) html+='<button class="cal-cell empty"></button>';
+    for(let d=1;d<=dim;d++){
+      const ck=k(viewY,viewM,d), en=inData(viewY,viewM,d); let cls='cal-cell';
+      if(!en) cls+=' disabled';
+      if(sK&&eK){ const lo=Math.min(sK,eK),hi=Math.max(sK,eK);
+        if(ck===lo||ck===hi) cls+=' endpoint'; else if(ck>lo&&ck<hi) cls+=' in-range'; }
+      else if(sK&&ck===sK) cls+=' endpoint';
+      html+=`<button class="${cls}" data-d="${d}" ${en?'':'disabled'}>${d}</button>`;
+    }
+    daysEl.innerHTML=html;
+    daysEl.querySelectorAll('.cal-cell[data-d]:not(.disabled)').forEach(c=>c.onclick=()=>pick(+c.dataset.d));
+  }
+  function pick(d){
+    const cur={y:viewY,m:viewM,d};
+    if(!selS || (selS&&selE)){ selS=cur; selE=null; }
+    else if(k(cur.y,cur.m,cur.d) < k(selS.y,selS.m,selS.d)){ selE=selS; selS=cur; }
+    else selE=cur;
+    render();
+  }
+  btn.onclick=e=>{ e.stopPropagation();
+    selS={y:AY,m:AM,d:A_FROM+currentRange.fromIdx}; selE={y:AY,m:AM,d:A_FROM+currentRange.toIdx};
+    viewY=AY; viewM=AM; render(); pop.hidden=!pop.hidden; };
+  document.addEventListener('click',e=>{ if(!pop.hidden && !pop.contains(e.target) && !btn.contains(e.target)) pop.hidden=true; });
+  document.getElementById('calPrev').onclick=()=>{ if(viewM===0){viewM=11;viewY--;}else viewM--; render(); };
+  document.getElementById('calNext').onclick=()=>{ if(viewM===11){viewM=0;viewY++;}else viewM++; render(); };
+  document.getElementById('dpCancel').onclick=()=>{pop.hidden=true;};
+  document.getElementById('dpApply').onclick=()=>{
+    if(!selS){pop.hidden=true;return;}
+    const e=selE||selS;
+    setRange(selS.d-A_FROM, e.d-A_FROM);   // 起止均落在可用范围内
+    pop.hidden=true; };
+})();
+
+/* ---------- 聚合导出（模型 / 成员 / 时间，跟随当前区间，聚合数据同步秒出）---------- */
+function downloadCSV(name,rows){
+  const blob=new Blob(['\ufeff'+rows.map(r=>r.join(',')).join('\n')],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+}
+function exportModel(){ const a=currentAgg,t=a.total;
+  const rows=[['模型','消耗积分','占比']].concat(
+    MODELS.map((m,i)=>({m,v:a.byModel[i]})).sort((x,y)=>y.v-x.v).map(({m,v})=>[m.key,v,(t?v/t*100:0).toFixed(1)+'%']));
+  downloadCSV(`model-consumption-${rangeTag()}.csv`,rows); }
+function exportMember(){ const a=currentAgg,t=a.total;
+  const rows=[['排名','成员','邮箱','常用模型','消耗积分','占比']].concat(
+    a.byMember.map((m,i)=>[i+1,m.name,m.email,m.fav.key,m.total,(t?m.total/t*100:0).toFixed(1)+'%']));
+  downloadCSV(`member-consumption-${rangeTag()}.csv`,rows); }
+function exportTime(){ const a=currentAgg;
+  const rows=[['日期'].concat(MODELS.map(m=>m.key)).concat(['当日合计'])].concat(
+    a.dates.map((d,k)=>[d].concat(a.bdm[k]).concat([a.byDateTotal[k]])));
+  downloadCSV(`time-consumption-${rangeTag()}.csv`,rows); }
+document.getElementById('dlModel').onclick=exportModel;
+document.getElementById('dlMember').onclick=exportMember;
+document.getElementById('dlTrend').onclick=exportTime;
+
+/* ============ 消耗明细：服务端分页 + 时间窗 + 懒加载(500) + 在线上限(1000) + 受控异步导出 ============ */
+const pad = n=>String(n).padStart(2,'0');
+const timeFmt = d=>pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate())+' '+pad(d.getUTCHours())+':'+pad(d.getUTCMinutes())+':'+pad(d.getUTCSeconds());
+const initialOf = n=>(n.replace(/[^A-Za-z\u4e00-\u9fa5]/g,'').slice(0,1).toUpperCase()||'·');
+
+const ONLINE_CAP = 1000, BATCH = 500;
+function windowEnd(days){ let end=0,c=0; for(const b of blocks){ if(c>=days) break; end=b.hi; c++; } return end; }
+
+function passFilter(rec,f){
+  if(f.member>=0 && rec.memberIdx!==f.member) return false;
+  if(f.model >=0 && rec.modelIdx !==f.model)  return false;
+  if(f.q){
+    const hay=(MEMBERS[rec.memberIdx].name+MEMBERS[rec.memberIdx].email+MODELS[rec.modelIdx].key+rec.task).toLowerCase();
+    if(!hay.includes(f.q)) return false;
+  }
+  return true;
+}
+function mapRow(rec){
+  const mb=MEMBERS[rec.memberIdx], md=MODELS[rec.modelIdx];
+  return {ts:rec.ts,name:mb.name,email:mb.email,model:md.key,color:md.color,
+          credits:rec.credits,task:rec.task,ok:rec.ok};
+}
+// 模拟服务端 COUNT（真实环境是带索引的 count，这里整窗扫描计数，仅计数器、不落地明细）
+function apiCount(f){ return new Promise(res=>setTimeout(()=>{
+  let n=0; for(let i=f.lo;i<f.hi;i++) if(passFilter(recordAt(i),f)) n++; res(n);
+},120)); }
+// 模拟服务端 keyset 分页：从 cursor 向后扫，凑满 limit 条匹配即返回（每次只有一页离开“后端”）
+function apiPage(f,cursor,limit){ return new Promise(res=>setTimeout(()=>{
+  const rows=[]; let i=cursor;
+  for(;i<f.hi && rows.length<limit;i++){ const rec=recordAt(i); if(passFilter(rec,f)) rows.push(mapRow(rec)); }
+  res({rows,nextCursor:i,done:i>=f.hi});
+},180)); }
+
+const elBody=document.getElementById('ledgerBody');
+const elSum =document.getElementById('ledgerSum');
+const elFoot=document.getElementById('ledgerFoot');
+const elSearch=document.getElementById('ledgerSearch');
+function opt(sel,v,t){const o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o);}
+const fMember=document.getElementById('fMember'); opt(fMember,'-1','全部成员'); MEMBERS.forEach((m,i)=>opt(fMember,i,m.name));
+const fModel =document.getElementById('fModel');  opt(fModel,'-1','全部模型');  MODELS.forEach((m,i)=>opt(fModel,i,m.key));
+
+let state={f:null,cursor:0,loaded:0,total:null,done:false,loading:false,capped:false};
+let queryToken=0, io;
+
+function readFilters(){
+  const b=rawBounds(currentRange.fromIdx,currentRange.toIdx);
+  return {member:+fMember.value,model:+fModel.value,
+          q:elSearch.value.trim().toLowerCase(),lo:b.lo,hi:b.hi};
+}
+
+async function applyFilter(){
+  const token=++queryToken;
+  const f=readFilters();
+  state={f,cursor:f.lo,loaded:0,total:null,done:false,loading:true,capped:false};
+  elBody.innerHTML=''; renderSum(); renderFoot();
+  apiCount(state.f).then(n=>{ if(token===queryToken){ state.total=n; renderSum(); }});
+  await loadMore(token);
+}
+
+async function loadMore(token){
+  if(state.loading && token===undefined) return;
+  if(state.done || state.capped) return;
+  const room=ONLINE_CAP-state.loaded;
+  if(room<=0){ state.capped=true; renderFoot(); return; }
+  state.loading=true; renderFoot();
+  const page=await apiPage(state.f,state.cursor,Math.min(BATCH,room));
+  if(token!==undefined && token!==queryToken) return;       // 已被新筛选取代，丢弃
+  appendRows(page.rows);
+  state.cursor=page.nextCursor; state.loaded+=page.rows.length; state.done=page.done;
+  if(state.loaded>=ONLINE_CAP && !state.done) state.capped=true;
+  state.loading=false; renderSum(); renderFoot();
+}
+
+function appendRows(rows){
+  elBody.insertAdjacentHTML('beforeend', rows.map(e=>`
+    <tr>
+      <td class="cell-time mono">${timeFmt(e.ts)}</td>
+      <td><div class="user"><div class="avatar">${initialOf(e.name)}</div>
+        <div><div class="uname">${e.name}</div><div class="uemail">${e.email}</div></div></div></td>
+      <td><span class="modeltag"><span class="dot" style="background:${e.color}"></span>${e.model}</span></td>
+      <td class="tid mono">${e.task}</td>
+      <td><span class="badge ${e.ok?'ok':'fail'}"><span class="d"></span>${e.ok?'成功':'失败'}</span></td>
+      <td class="r"><span class="tval mono">${fmt(e.credits)}</span></td>
+    </tr>`).join(''));
+}
+
+function renderSum(){
+  elSum.textContent='共 '+(state.total==null?'…':fmt(state.total))+' 条 · 已加载 '+fmt(state.loaded)+' 条';
+}
+
+function renderFoot(){
+  if(state.loading){ elFoot.innerHTML='<div class="foot-load"><span class="spin"></span>加载中…</div>'; return; }
+  if(state.capped){
+    elFoot.innerHTML='<div class="cap-banner"><div><b>已达在线展示上限 1,000 条。</b>更早或更多记录请导出后在本地查看。</div>'
+      +'<button class="tbtn primary" id="capExport">导出 CSV</button></div>';
+    document.getElementById('capExport').onclick=startExport; return;
+  }
+  if(state.done){ elFoot.innerHTML='<div class="foot-done">已全部加载 · 共 '+fmt(state.loaded)+' 条</div>'; return; }
+  elFoot.innerHTML='<button class="tbtn loadmore" id="loadMoreBtn">加载更多 500 条</button><div id="sentinel"></div>';
+  document.getElementById('loadMoreBtn').onclick=()=>loadMore();
+  const s=document.getElementById('sentinel');
+  if(io) io.disconnect();
+  io=new IntersectionObserver(es=>{ if(es[0].isIntersecting && !state.loading) loadMore(); },{rootMargin:'200px'});
+  io.observe(s);
+}
+
+[fMember,fModel].forEach(el=>el.onchange=applyFilter);
+let searchTimer; elSearch.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(applyFilter,300);};
+
+/* ---- 受控异步导出任务 ---- */
+const exportBtn=document.getElementById('exportBtn');
+const exportCard=document.getElementById('exportCard');
+let exporting=false;
+exportBtn.onclick=startExport;
+
+function startExport(){
+  if(exporting){ flash(exportBtn); return; }                 // 单客户同时仅允许一个导出
+  exporting=true; exportBtn.disabled=true; exportBtn.textContent='导出中…';
+  const total=state.total||0;
+  exportCard.hidden=false; renderExport('queued',0,total);
+  setTimeout(()=>{
+    renderExport('processing',0,total);
+    let p=0; const timer=setInterval(()=>{
+      p+=Math.max(4,Math.round((100-p)*0.18));
+      if(p>=100){ clearInterval(timer); renderExport('done',100,total); }
+      else renderExport('processing',p,total);
+    },180);
+  },700);
+}
+
+function renderExport(stage,prog,total){
+  const f=state.f;
+  const scope=[rangeLabel(currentRange.fromIdx,currentRange.toIdx),
+    f.member<0?null:MEMBERS[f.member].name, f.model<0?null:MODELS[f.model].key
+  ].filter(Boolean).join(' · ');
+  const sizeMB=(total*0.06/1024).toFixed(1);
+  let body;
+  if(stage==='queued') body=`<span class="ex-state queued">排队中</span><div class="ex-meta">本次导出约 ${fmt(total)} 条 · ${scope}</div>`;
+  else if(stage==='processing') body=`<span class="ex-state proc">生成中 ${prog}%</span><div class="ex-bar"><span style="width:${prog}%"></span></div><div class="ex-meta">约 ${fmt(total)} 条 · ~${sizeMB} MB · 后台流式生成中</div>`;
+  else { exporting=false; exportBtn.disabled=false; exportBtn.textContent='导出 CSV';
+    body=`<span class="ex-state done">可下载</span>
+      <div class="ex-meta">consumption_${Date.now().toString().slice(-6)}.csv · ${fmt(total)} 条 · ~${sizeMB} MB · 链接 72h 有效</div>
+      <div class="ex-actions"><button class="tbtn primary" id="dlReady">下载${total>20000?'（示例前 2 万条）':''}</button><button class="tbtn" id="exClose">关闭</button></div>`;
+  }
+  exportCard.innerHTML=`<div class="ex-row"><div class="ex-ico">⤓</div><div class="ex-main">${body}</div></div>
+    <div class="ex-guard">护栏：单客户同时仅 1 个导出任务 · 单次区间 ≤ 31 天 · 后台异步生成不阻塞在线查询 · 大客户走 API/按天推送</div>`;
+  if(stage==='done'){
+    document.getElementById('dlReady').onclick=()=>doDownload(total);
+    document.getElementById('exClose').onclick=()=>{exportCard.hidden=true;};
+  }
+}
+
+function doDownload(total){                                   // 仅生成示例上限，演示流式落盘；真实环境后台写 OSS
+  const cap=Math.min(total,20000), f=state.f;
+  const lines=[['时间','成员','邮箱','模型','任务ID','消耗积分','状态'].join(',')];
+  let written=0;
+  for(let i=f.lo;i<f.hi && written<cap;i++){ const rec=recordAt(i); if(!passFilter(rec,f)) continue;
+    const mb=MEMBERS[rec.memberIdx];
+    lines.push([timeFmt(rec.ts),mb.name,mb.email,MODELS[rec.modelIdx].key,rec.task,rec.credits,rec.ok?'成功':'失败'].join(','));
+    written++; }
+  const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='consumption-ledger.csv'; a.click();
+}
+function flash(el){ el.style.outline='2px solid #c2603a'; setTimeout(()=>el.style.outline='',500); }
+
+setRange(0, DATES.length-1);   // 初始化：默认全区间(近7天)，联动渲染 KPI/图表/汇总/明细
+
+</script>
+</body>
+</html>
