@@ -320,6 +320,7 @@
       </thead>
       <tbody id="memberTable"></tbody>
     </table>
+    <div class="pager" id="memberPager"></div>
   </div>
 
   <!-- CONSUMPTION LEDGER -->
@@ -522,9 +523,21 @@ function renderDashboard(agg){
   memberChart.data.datasets[0].backgroundColor=agg.byMember.map(m=>m.fav.color);
   memberChart.update();
 
+  memberPage=1; renderMemberTable();   // 切换时间窗 → 成员列表重排，回到第 1 页
+}
+
+/* ---------- 成员消耗汇总：客户端分页（默认每页 10 名）---------- */
+const MEMBER_PAGE_SIZE=10;
+let memberPage=1;
+function renderMemberTable(){
+  const agg=currentAgg; if(!agg) return;
   const tb=document.getElementById('memberTable'); tb.innerHTML='';
-  const maxTotal=agg.byMember[0]?(agg.byMember[0].total||1):1;
-  agg.byMember.forEach((m,i)=>{
+  const total=agg.byMember.length;
+  const pages=Math.max(1,Math.ceil(total/MEMBER_PAGE_SIZE));
+  memberPage=Math.min(Math.max(1,memberPage),pages);
+  const start=(memberPage-1)*MEMBER_PAGE_SIZE, end=Math.min(start+MEMBER_PAGE_SIZE,total);
+  const maxTotal=agg.byMember[0]?(agg.byMember[0].total||1):1;   // 进度条按全体最大值标定，翻页不变形
+  for(let i=start;i<end;i++){ const m=agg.byMember[i];
     const ini=m.name.replace(/[^A-Za-z\u4e00-\u9fa5]/g,'').slice(0,1).toUpperCase()||'·';
     let segs=''; m.perModel.forEach((v,mdi)=>{ if(v>0&&m.total) segs+=`<span style="background:${MODELS[mdi].color};width:${v/m.total*100}%"></span>`; });
     const tr=document.createElement('tr');
@@ -537,7 +550,18 @@ function renderDashboard(agg){
       <td class="r"><span class="tval">${fmt(m.total)}</span></td>
       <td class="r"><span class="tpct">${agg.total?(m.total/agg.total*100).toFixed(1):'0.0'}%</span></td>`;
     tb.appendChild(tr);
-  });
+  }
+  renderMemberPager(total,pages,start,end);
+}
+function renderMemberPager(total,pages,start,end){
+  const el=document.getElementById('memberPager'); if(!el) return;
+  el.innerHTML=`<span>共 ${fmt(total)} 名成员 · 第 ${total?start+1:0}–${end} 名</span>`
+    +`<button id="mPrev" ${memberPage<=1?'disabled':''}>上一页</button>`
+    +`<span class="mono">${memberPage} / ${pages}</span>`
+    +`<button id="mNext" ${memberPage>=pages?'disabled':''}>下一页</button>`;
+  const prev=el.querySelector('#mPrev'), next=el.querySelector('#mNext');
+  if(prev) prev.onclick=()=>{ if(memberPage>1){memberPage--; renderMemberTable();} };
+  if(next) next.onclick=()=>{ if(memberPage<pages){memberPage++; renderMemberTable();} };
 }
 
 /* ---------- 切换时间区间：KPI / 三图 / 汇总 / 明细 / 导出 全部联动重算 ---------- */
